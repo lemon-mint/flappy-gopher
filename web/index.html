@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Flappy-Gopher</title>
+  <style>
+    body {
+      background-color: #70c5ce;
+      overflow: hidden;
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      touch-action: manipulation;
+    }
+
+    canvas {
+      background-color: #70c5ce;
+      max-width: 100%;
+      max-height: 100%;
+    }
+
+    /* Modal styles */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-content {
+      background-color: #fff;
+      margin: 10% auto;
+      padding: 30px;
+      border: 2px solid #888;
+      border-radius: 10px;
+      width: 80%;
+      max-width: 400px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .modal h2 {
+      margin-top: 0;
+      color: #333;
+      text-align: center;
+    }
+
+    .modal input {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      box-sizing: border-box;
+      font-size: 16px;
+      border: 2px solid #ddd;
+      border-radius: 5px;
+    }
+
+    .modal button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 10px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: bold;
+    }
+
+    .modal button:hover {
+      background-color: #45a049;
+    }
+
+    .leaderboard {
+      margin-top: 20px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .leaderboard-item {
+      padding: 8px;
+      margin: 5px 0;
+      background-color: #f0f0f0;
+      border-radius: 5px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .leaderboard-item.current {
+      background-color: #ffd700;
+      font-weight: bold;
+    }
+
+    .rank {
+      font-weight: bold;
+      color: #666;
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- Name Input Modal -->
+  <div id="nameModal" class="modal">
+    <div class="modal-content">
+      <h2>Game Over!</h2>
+      <p style="text-align: center; font-size: 20px;">Your Score: <strong id="finalScore">0</strong></p>
+      <input type="text" id="playerName" placeholder="Enter your name" maxlength="20" />
+      <button onclick="submitScore()">Submit Score</button>
+      <div class="leaderboard" id="leaderboard"></div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const gopher = new Image();
+    gopher.src = '/gopher.png';
+
+    let canvasWidth = canvas.width = window.innerWidth;
+    let canvasHeight = canvas.height = window.innerHeight;
+
+    let gopherX = canvasWidth * 0.2; // Slightly offset from the left
+    let gopherY = canvasHeight / 2 - 25;
+    const gopherWidth = 50;
+    const gopherHeight = 50;
+    let gopherVelocity = 0;
+    const gopherGravity = 0.1;
+    const terminalVelocity = 5;
+    const jumpPower = -5;
+
+    const pipeGap = 200;
+    const pipeWidth = 50;
+    let pipeX = canvasWidth;
+    let pipeY = Math.random() * (canvasHeight - pipeGap - 200) + 100;
+    const pipeSpeed = 2;
+
+    let score = 0;
+    let gameStatus = 'running';
+
+    window.addEventListener('resize', () => {
+      canvasWidth = canvas.width = window.innerWidth;
+      canvasHeight = canvas.height = window.innerHeight;
+    });
+
+    const handleJump = () => {
+      if (gameStatus === 'running') {
+        gopherVelocity = jumpPower;
+      } else if (gameStatus === 'gameover') {
+        // Do nothing - modal is shown instead
+      }
+    }
+
+    canvas.addEventListener('click', handleJump);
+    canvas.addEventListener('touchstart', handleJump);
+    document.addEventListener('keydown', (event) => {
+      if (event.code === 'Space') {
+        event.preventDefault();
+        handleJump();
+      }
+    });
+
+    function drawGopher() {
+      ctx.drawImage(gopher, gopherX, gopherY, gopherWidth, gopherHeight);
+    }
+
+    function drawPipes() {
+      ctx.fillStyle = 'green';
+      ctx.fillRect(pipeX, 0, pipeWidth, pipeY);
+      ctx.fillRect(pipeX, pipeY + pipeGap, pipeWidth, canvasHeight - pipeY - pipeGap);
+    }
+
+    function drawScore() {
+      ctx.font = '20px Arial';
+      ctx.fillStyle = '#000';
+      ctx.fillText('Score: ' + score, 10, 30);
+    }
+
+    function drawGameOver() {
+      ctx.font = '30px Arial';
+      ctx.fillStyle = 'red';
+      ctx.fillText('Game Over!', canvasWidth / 2 - 80, canvasHeight / 2);
+    }
+
+    function showNameModal() {
+      document.getElementById('finalScore').textContent = score;
+      document.getElementById('playerName').value = '';
+      document.getElementById('nameModal').style.display = 'block';
+      displayLeaderboard();
+    }
+
+    async function submitScore() {
+      const playerName = document.getElementById('playerName').value.trim();
+      if (playerName === '') {
+        alert('Please enter your name!');
+        return;
+      }
+
+      try {
+        // Submit score to server
+        const response = await fetch('/api/scores', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: playerName,
+            score: score
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to submit score');
+        }
+
+        // Fetch and display updated leaderboard
+        await displayLeaderboard(playerName);
+      } catch (error) {
+        console.error('Error submitting score:', error);
+        alert('Failed to submit score. Please try again.');
+      }
+    }
+
+    async function displayLeaderboard(currentPlayer = null) {
+      const leaderboardDiv = document.getElementById('leaderboard');
+      
+      try {
+        // Fetch leaderboard from server
+        const response = await fetch('/api/leaderboard');
+        if (!response.ok) {
+          throw new Error('Failed to fetch leaderboard');
+        }
+
+        const leaderboard = await response.json();
+
+        if (!leaderboard || leaderboard.length === 0) {
+          leaderboardDiv.innerHTML = '<p style="text-align: center; color: #999;">No scores yet. Be the first!</p>';
+          return;
+        }
+
+        let html = '<h3 style="text-align: center;">Leaderboard</h3>';
+        leaderboard.forEach((entry, index) => {
+          const isCurrentPlayer = currentPlayer && entry.name === currentPlayer && entry.score === score;
+          const itemClass = isCurrentPlayer ? 'leaderboard-item current' : 'leaderboard-item';
+          html += `
+            <div class="${itemClass}">
+              <span><span class="rank">#${index + 1}</span> ${entry.name}</span>
+              <span>${entry.score}</span>
+            </div>
+          `;
+        });
+        leaderboardDiv.innerHTML = html;
+      } catch (error) {
+        console.error('Error fetching leaderboard:', error);
+        leaderboardDiv.innerHTML = '<p style="text-align: center; color: #f00;">Failed to load leaderboard</p>';
+      }
+    }
+
+    function resetGame() {
+      gameStatus = 'running';
+      score = 0;
+      gopherX = canvasWidth * 0.2; // Slightly offset from the left
+      gopherY = canvasHeight / 2 - 25;
+      gopherVelocity = 0;
+      pipeX = canvasWidth;
+      pipeY = Math.random() * (canvasHeight - pipeGap - 200) + 100;
+      document.getElementById('nameModal').style.display = 'none';
+    }
+
+    function update() {
+      if (gameStatus === 'running') {
+        gopherVelocity += gopherGravity;
+        if (gopherVelocity > terminalVelocity) {
+          gopherVelocity = terminalVelocity;
+        }
+        gopherY += gopherVelocity;
+
+        pipeX -= pipeSpeed;
+        if (pipeX + pipeWidth < 0) {
+          pipeX = canvasWidth;
+          pipeY = Math.random() * (canvasHeight - pipeGap - 200) + 100;
+          score++;
+        }
+
+        if (
+          gopherY + gopherHeight > canvasHeight ||
+          gopherY < 0 ||
+          (gopherX + gopherWidth > pipeX &&
+            gopherX < pipeX + pipeWidth &&
+            (gopherY < pipeY || gopherY + gopherHeight > pipeY + pipeGap))
+        ) {
+          gameStatus = 'gameover';
+          showNameModal();
+        }
+
+        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+        drawGopher();
+        drawPipes();
+        drawScore();
+      } else if (gameStatus === 'gameover') {
+        drawGameOver();
+      }
+
+      requestAnimationFrame(update);
+    }
+
+    update(); 
+  </script>
+</body>
+
+</html>
