@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gosuda/portal/sdk"
 	"github.com/julienschmidt/httprouter"
+	"gosuda.org/portal/sdk"
 )
 
 // Score represents a player's score entry
