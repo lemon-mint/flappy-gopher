@@ -4,7 +4,7 @@ go 1.25.3
 
 require (
 	github.com/julienschmidt/httprouter v1.3.0
-	gosuda.org/portal v1.2.0
+	gosuda.org/portal v1.4.0
 )
 
 require (
